@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebAR 프로젝트</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; font-family: -apple-system, system-ui, sans-serif;
+      background: radial-gradient(circle at 30% 0%, #1a237e, #0d0d1a); color: #fff;
+      display: flex; flex-direction: column; align-items: center; padding: 40px 18px; }
+    h1 { font-size: 24px; }
+    .cards { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 420px; margin-top: 12px; }
+    a.card { text-decoration: none; color: #fff; background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 18px 20px; }
+    a.card:active { background: rgba(255,255,255,.12); }
+    a.card h2 { margin: 0 0 4px; font-size: 18px; }
+    a.card p { margin: 0; opacity: .75; font-size: 13px; line-height: 1.5; }
+    .note { margin-top: 22px; max-width: 420px; font-size: 12px; opacity: .6; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>🕶️ WebAR 프로젝트</h1>
+  <div class="cards">
+    <a class="card" href="treasure-hunt/">
+      <h2>💎 보물 탐험 AR (게임)</h2>
+      <p>방을 둘러보며 숨은 보물을 찾는 자이로 기반 AR 게임. 난이도·웨이브·콤보·시간보너스.</p>
+    </a>
+    <a class="card" href="webar-demos/">
+      <h2>🧪 WebAR 데모 모음</h2>
+      <p>테이블탑 / 탐험 / 이미지 타깃 3종 샘플.</p>
+    </a>
+  </div>
+  <p class="note">📱 스마트폰·태블릿 브라우저에서 여세요. 카메라/자이로 권한이 필요합니다.</p>
+</body>
+</html>
