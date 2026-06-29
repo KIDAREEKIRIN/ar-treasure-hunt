@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>보물 탐험 AR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; font-family: -apple-system, system-ui, sans-serif; background: #000; }
+
+    #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+
+    #hud { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
+    .pill { background: rgba(0,0,0,.62); color: #fff; padding: 7px 11px; border-radius: 12px;
+      font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pill b { color: #FFD54F; font-size: 16px; }
+    .pill.danger b { color: #FF5252; }
+    #comboPill { transition: transform .15s; }
+    #comboPill.bump { transform: scale(1.25); }
+    #combo.hot { color: #FF8A65; }
+    /* 콤보 게이지: reticle 주위 원형 링 */
+    #comboRing { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 4; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    #comboRingFill { transition: stroke .2s; }
+    #comboMult { position: fixed; top: calc(50% + 44px); left: 50%; transform: translateX(-50%);
+      z-index: 6; color: #fff; font-weight: 800; font-size: 15px; text-shadow: 0 1px 4px rgba(0,0,0,.7);
+      opacity: 0; transition: opacity .15s; pointer-events: none; }
+    #timer.low { color: #FF5252; animation: blink .6s steps(2) infinite; }
+    @keyframes blink { 50% { opacity: .35; } }
+
+    #reticle { position: fixed; top: 50%; left: 50%; width: 28px; height: 28px;
+      transform: translate(-50%, -50%); z-index: 5; pointer-events: none;
+      border: 2px solid rgba(255,255,255,.85); border-radius: 50%; box-shadow: 0 0 0 2px rgba(0,0,0,.4); }
+    #reticle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+      transform: translate(-50%,-50%); background: #FFD54F; border-radius: 50%; }
+
+    #radar { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 10;
+      display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+    #arrowWrap { width: 76px; height: 76px; display: flex; align-items: center; justify-content: center; }
+    #arrow { width: 0; height: 0; border-left: 22px solid transparent; border-right: 22px solid transparent;
+      border-bottom: 40px solid #FFD54F; transition: transform .12s linear, filter .2s;
+      filter: drop-shadow(0 0 6px rgba(255,213,79,.6)); }
+    #radarLabel { background: rgba(0,0,0,.6); color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 10px; }
+
+    #toast { position: fixed; top: 46%; left: 50%; transform: translate(-50%,-50%); z-index: 12;
+      font-size: 30px; font-weight: 800; opacity: 0; text-shadow: 0 2px 12px rgba(0,0,0,.6);
+      pointer-events: none; color: #FFD54F; text-align: center; }
+    #toast.bad { color: #FF5252; } #toast.time { color: #00E676; }
+    #toast.show { animation: pop .7s ease-out; }
+    @keyframes pop {
+      0% { opacity: 0; transform: translate(-50%,-50%) scale(.5); }
+      25% { opacity: 1; transform: translate(-50%,-58%) scale(1.1); }
+      100% { opacity: 0; transform: translate(-50%,-80%) scale(1); }
+    }
+
+    .screen { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px; text-align: center; color: #fff;
+      padding: 24px; background: radial-gradient(circle at 50% 20%, #1a237e, #0a0a14); }
+    .screen h1 { font-size: 27px; margin: 0; }
+    .screen p { opacity: .85; font-size: 14px; max-width: 330px; margin: 0; line-height: 1.6; }
+    .btn { border: none; border-radius: 16px; padding: 15px 28px; font-size: 17px; font-weight: 700;
+      color: #1a237e; background: #FFD54F; cursor: pointer; }
+    .btn:active { transform: scale(.97); }
+    .diffs { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-top: 6px; }
+    .diff { border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #fff;
+      border-radius: 14px; padding: 13px 18px; cursor: pointer; text-align: left; }
+    .diff:active { background: rgba(255,255,255,.14); }
+    .diff .t { font-size: 17px; font-weight: 700; }
+    .diff .d { font-size: 12px; opacity: .7; margin-top: 3px; }
+    .diff .best { float: right; font-size: 12px; color: #FFD54F; opacity: .9; }
+    .legend { font-size: 12px; opacity: .8; line-height: 1.8; }
+    .legend i { font-style: normal; }
+    #countScreen, #endScreen { display: none; }
+    #countNum { font-size: 90px; font-weight: 900; color: #FFD54F; }
+    #endScreen .stat { font-size: 20px; }
+    #endScreen .stat b { color: #FFD54F; }
+    #record { color: #FF8A65; font-weight: 800; font-size: 18px; min-height: 22px; }
+  </style>
+</head>
+<body>
+  <video id="cam" autoplay playsinline muted></video>
+
+  <div id="hud">
+    <div class="pill">🏆 <b id="score">0</b></div>
+    <div class="pill" id="comboPill">🔥 <b id="combo">—</b></div>
+    <div class="pill">🌊 <b id="wave">1</b></div>
+    <div class="pill">💎 <b id="remaining">0</b></div>
+    <div class="pill danger">⏱️ <b id="timer">0.0</b>s</div>
+  </div>
+  <div id="reticle"></div>
+  <!-- 콤보 게이지: reticle 주위를 도는 원형 링 -->
+  <svg id="comboRing" width="72" height="72" viewBox="0 0 72 72">
+    <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="4"></circle>
+    <circle id="comboRingFill" cx="36" cy="36" r="30" fill="none" stroke="#00E676"
+            stroke-width="4" stroke-linecap="round" transform="rotate(-90 36 36)"></circle>
+  </svg>
+  <div id="comboMult"></div>
+  <div id="radar"><div id="arrowWrap"><div id="arrow"></div></div><div id="radarLabel">가장 가까운 보물 방향</div></div>
+  <div id="toast">+1</div>
+
+  <div id="startScreen" class="screen">
+    <h1>💎 보물 탐험 AR</h1>
+    <p>몸을 돌려 숨은 보물을 모으세요. 빠른 연속 획득은 <b>콤보 보너스</b>! 일정 시간마다 <b>웨이브</b>로 재배치됩니다.</p>
+    <div class="legend">
+      <i>🟡 일반 1점 · 🔵 희귀 3점 · 🟣 전설 5점 (×콤보)</i><br/>
+      <i>🟢 시간 보너스 +초 · 🟥 지뢰 (시간·점수 감점)</i>
+    </div>
+    <div class="diffs" id="diffList"></div>
+    <p style="font-size:12px;opacity:.6">카메라와 기기 방향(자이로) 권한을 허용해주세요</p>
+  </div>
+
+  <div id="countScreen" class="screen"><div id="countNum">3</div></div>
+
+  <div id="endScreen" class="screen">
+    <h1 id="endTitle">🎉 클리어!</h1>
+    <div id="record"></div>
+    <div class="stat" id="endStat"></div>
+    <button class="btn" id="replayBtn">다시 하기</button>
+  </div>
+
+  <a-scene renderer="alpha: true; colorManagement: true" background="transparent: true"
+    vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" treasure-game>
+    <a-camera id="cam-rig" position="0 0 0" wasd-controls-enabled="false"
+      look-controls="magicWindowTrackingEnabled: true; pointerLockEnabled: false; touchEnabled: false; mouseEnabled: false">
+      <a-cursor fuse="true" fuse-timeout="650" raycaster="objects: .treasure; far: 40"
+        material="color: #FFD54F; shader: flat"
+        geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"></a-cursor>
+    </a-camera>
+    <a-entity id="treasures"></a-entity>
+    <a-entity light="type: ambient; intensity: 0.95"></a-entity>
+    <a-entity light="type: directional; intensity: 0.6" position="1 2 1"></a-entity>
+  </a-scene>
+
+  <script>
+    // ====== 설정 ======
+    const CONFIG = {
+      modelTargetSize: 0.9,
+      fakePenaltySec: 5,     // 지뢰 시간 감점
+      timeBonusSec: 7,       // 시간 보너스 아이템 회복
+      comboWindowMs: 3000,
+    };
+    // 보물 종류 (점수 차등) — weight 비율로 등장. 종류마다 다른 모델 사용.
+    // models: 위에서부터 시도 → 모두 실패하면 색 도형(tint)으로 폴백.
+    // ▶ models/common.glb · rare.glb · epic.glb 를 넣으면 각 종류에 자동 적용(어떤 크기든 자동 보정).
+    const THREE_CDN = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r155/examples/models/gltf/';
+    // tint = 폴백 색/파티클 색, glow = 모델에 입히는 발광(없으면 자연색)
+    const TYPES = [
+      { key: 'common', points: 1, weight: 60, tint: '#FFD54F', glow: null,      sizeMul: 1.0,  aura: null,
+        models: ['models/common.glb', THREE_CDN + 'Parrot.glb'] },
+      { key: 'rare',   points: 3, weight: 30, tint: '#29B6F6', glow: '#29B6F6', sizeMul: 1.15, aura: '#29B6F6',
+        models: ['models/rare.glb', THREE_CDN + 'Flamingo.glb'] },
+      { key: 'epic',   points: 5, weight: 10, tint: '#AB47BC', glow: '#AB47BC', sizeMul: 1.3,  aura: '#AB47BC',
+        models: ['models/epic.glb', THREE_CDN + 'Horse.glb'] },
+    ];
+    const TYPE_WEIGHT_SUM = TYPES.reduce((s, t) => s + t.weight, 0);
+    function pickType() {
+      let r = Math.random() * TYPE_WEIGHT_SUM;
+      for (const t of TYPES) { if ((r -= t.weight) < 0) return t; }
+      return TYPES[0];
+    }
+    const LEVELS = {
+      easy:   { label: '쉬움',   desc: '보물 6 · 지뢰 0 · 90초 · 단일',     count: 6,  perWave: 6, fakes: 0, timeItems: 1, time: 90, waveMs: 0,     minR: 3, maxR: 5 },
+      normal: { label: '보통',   desc: '보물 9 · 지뢰 2 · 70초 · 웨이브12s', count: 9,  perWave: 3, fakes: 2, timeItems: 1, time: 70, waveMs: 12000, minR: 3, maxR: 6 },
+      hard:   { label: '어려움', desc: '보물 12 · 지뢰 3 · 55초 · 웨이브10s', count: 12, perWave: 4, fakes: 3, timeItems: 1, time: 55, waveMs: 10000, minR: 3, maxR: 7 },
+    };
+
+    // ====== 최고기록 ======
+    const bestKey = (k) => 'treasureHuntBest_' + k;
+    const getBest = (k) => parseInt(localStorage.getItem(bestKey(k)) || '0', 10);
+    const setBest = (k, v) => localStorage.setItem(bestKey(k), String(v));
+
+    // ====== 난이도 버튼 ======
+    const diffList = document.getElementById('diffList'), diffBtns = {};
+    Object.keys(LEVELS).forEach((key) => {
+      const b = document.createElement('button');
+      b.className = 'diff';
+      b.addEventListener('click', () => beginWithDifficulty(key));
+      diffList.appendChild(b); diffBtns[key] = b;
+    });
+    function refreshBestLabels() {
+      Object.keys(LEVELS).forEach((key) => {
+        const lv = LEVELS[key], best = getBest(key);
+        diffBtns[key].innerHTML =
+          `<span class="best">${best ? '최고 ' + best : ''}</span><div class="t">${lv.label}</div><div class="d">${lv.desc}</div>`;
+      });
+    }
+    refreshBestLabels();
+
+    // ====== 권한 + 시작 ======
+    let audioCtx = null, selectedKey = 'normal';
+    async function requestGyroPermission() {
+      const D = window.DeviceOrientationEvent;
+      if (D && typeof D.requestPermission === 'function') {
+        try { return (await D.requestPermission()) === 'granted'; } catch (e) { return false; }
+      }
+      return true;
+    }
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      document.getElementById('cam').srcObject = stream;
+    }
+    async function beginWithDifficulty(key) {
+      selectedKey = key;
+      try {
+        await requestGyroPermission(); await startCamera();
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+      } catch (e) {
+        alert('시작할 수 없습니다. HTTPS 주소인지, 카메라/자이로 권한을 허용했는지 확인하세요.\n' + e);
+        return;
+      }
+      document.getElementById('startScreen').style.display = 'none';
+      runCountdown(() => document.querySelector('a-scene').emit('game-start', { key }));
+    }
+    function runCountdown(done) {
+      const screen = document.getElementById('countScreen'), num = document.getElementById('countNum');
+      const seq = ['3', '2', '1', 'GO!']; let i = 0;
+      screen.style.display = 'flex'; num.textContent = seq[0]; beep(0);
+      const step = () => {
+        i++;
+        if (i < seq.length) { num.textContent = seq[i]; beep(i); setTimeout(step, 650); }
+        else { screen.style.display = 'none'; done(); }
+      };
+      setTimeout(step, 650);
+    }
+    document.getElementById('replayBtn').addEventListener('click', () => location.reload());
+
+    // ====== 사운드 ======
+    function tone(freq, start, dur, type, vol) {
+      if (!audioCtx) return;
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type; o.frequency.value = freq; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(vol, start); g.gain.exponentialRampToValueAtTime(0.0008, start + dur);
+      o.start(start); o.stop(start + dur + 0.02);
+    }
+    function beep(i) { if (audioCtx) tone(i < 3 ? 520 : 920, audioCtx.currentTime, 0.18, 'square', 0.14); }
+    function collectSound(combo) {
+      if (!audioCtx) return;
+      const base = 620 + Math.min(combo, 10) * 70, t = audioCtx.currentTime;
+      [0, 0.07, 0.14].forEach((dt, i) => tone(base * (1 + i * 0.26), t + dt, 0.13, 'triangle', 0.16));
+    }
+    function timeSound() {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      [880, 1175].forEach((f, i) => tone(f, t + i * 0.1, 0.18, 'sine', 0.16));
+    }
+    function fakeSound() {
+      if (!audioCtx) return;
+      const dur = 0.35, n = Math.floor(audioCtx.sampleRate * dur);
+      const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate), data = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+      const src = audioCtx.createBufferSource(); src.buffer = buf;
+      const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+      const g = audioCtx.createGain(); g.gain.value = 0.35;
+      src.connect(lp); lp.connect(g); g.connect(audioCtx.destination); src.start();
+      tone(110, audioCtx.currentTime, 0.3, 'sawtooth', 0.2);
+    }
+    function jingle(win) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime, notes = win ? [523, 659, 784, 1046] : [440, 330, 247, 175];
+      notes.forEach((f, i) => tone(f, t + i * 0.14, 0.25, win ? 'triangle' : 'sawtooth', 0.16));
+    }
+    function showToast(text, cls) {
+      const t = document.getElementById('toast');
+      t.textContent = text; t.className = ''; if (cls) t.classList.add(cls);
+      void t.offsetWidth; t.classList.add('show');
+    }
+
+    // ====== 모델/도형 ======
+    function applyGem(el, color) {
+      el.removeAttribute('gltf-model');
+      el.setAttribute('geometry', 'primitive: dodecahedron; radius: 0.42');
+      el.setAttribute('material', `color: ${color}; emissive: ${color}; emissiveIntensity: 0.55; metalness: 0.4; roughness: 0.3`);
+    }
+    function autoFit(el, mul) {
+      const THREE = AFRAME.THREE, obj = el.object3D;
+      obj.scale.set(1, 1, 1); obj.position.set(0, 0, 0);
+      const box = new THREE.Box3().setFromObject(obj);
+      if (!isFinite(box.min.x)) return;
+      const size = new THREE.Vector3(); box.getSize(size);
+      const center = new THREE.Vector3(); box.getCenter(center);
+      const s = (CONFIG.modelTargetSize * (mul || 1)) / (Math.max(size.x, size.y, size.z) || 1);
+      obj.scale.setScalar(s);
+      obj.position.set(-center.x * s, -center.y * s, -center.z * s);
+    }
+    function tintModel(el, color) { // 희귀/전설 글로우 (재질 복제해 다른 보물에 영향 X)
+      const THREE = AFRAME.THREE;
+      el.object3D.traverse((o) => {
+        if (o.isMesh && o.material) {
+          o.material = o.material.clone();
+          o.material.emissive = new THREE.Color(color);
+          o.material.emissiveIntensity = 0.7;
+        }
+      });
+    }
+    function loadModelChain(el, models, glow, sizeMul, fallbackColor) {
+      let idx = 0;
+      el.addEventListener('model-loaded', () => { autoFit(el, sizeMul); if (glow) tintModel(el, glow); });
+      el.addEventListener('model-error', () => {
+        idx++;
+        if (idx < models.length) el.setAttribute('gltf-model', models[idx]);
+        else applyGem(el, fallbackColor);
+      });
+      if (models && models.length) el.setAttribute('gltf-model', models[0]);
+      else applyGem(el, fallbackColor);
+    }
+
+    // 라벨이 항상 카메라를 향하게
+    AFRAME.registerComponent('billboard', {
+      tick: function () {
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        if (cam) this.el.object3D.lookAt(cam.getWorldPosition(new AFRAME.THREE.Vector3()));
+      }
+    });
+
+    // ====== 게임 컴포넌트 ======
+    AFRAME.registerComponent('treasure-game', {
+      init: function () {
+        this.THREE = AFRAME.THREE;
+        this.cam = document.getElementById('cam-rig');
+        this.root = document.getElementById('treasures');
+        this.fwd = new this.THREE.Vector3(); this.right = new this.THREE.Vector3();
+        this.up = new this.THREE.Vector3(0, 1, 0); this.d = new this.THREE.Vector3();
+        this.started = false; this.treasures = [];
+        this.el.addEventListener('game-start', (e) => this.startGame(LEVELS[e.detail.key]));
+      },
+
+      startGame: function (level) {
+        this.level = level; this.needed = level.count;
+        this.collected = 0; this.spawnedReal = 0; this.score = 0;
+        this.combo = 0; this.lastCollect = 0; this.waveNum = 0;
+        this.deadline = performance.now() + level.time * 1000;
+        this.nextWaveAt = level.waveMs > 0 ? performance.now() + level.waveMs : Infinity;
+        this.root.innerHTML = ''; this.treasures = [];
+        this.spawnWave();
+        this.started = true;
+        document.getElementById('score').textContent = '0';
+        document.getElementById('remaining').textContent = this.needed;
+        this.updateCombo();
+      },
+
+      randomPos: function () {
+        const lv = this.level, angle = Math.random() * Math.PI * 2;
+        const r = lv.minR + Math.random() * (lv.maxR - lv.minR);
+        const y = -1.6 + Math.random() * 4.2;
+        return new this.THREE.Vector3(Math.sin(angle) * r, y, -Math.cos(angle) * r);
+      },
+      applyBob: function (el, pos) {
+        el.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+        el.setAttribute('animation__bob', `property: position; to: ${pos.x} ${pos.y + 0.25} ${pos.z}; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`);
+      },
+
+      makeOne: function (kind, type) {
+        const pos = this.randomPos();
+        const hit = document.createElement('a-entity');
+        hit.classList.add('treasure');
+        hit.setAttribute('geometry', 'primitive: sphere; radius: 0.6');
+        hit.setAttribute('material', 'opacity: 0; transparent: true');
+        this.applyBob(hit, pos);
+
+        const vis = document.createElement('a-entity');
+        vis.setAttribute('animation__spin', 'property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear');
+
+        if (kind === 'mine') {
+          vis.setAttribute('geometry', 'primitive: icosahedron; radius: 0.42');
+          vis.setAttribute('material', 'color: #2b2b2b; emissive: #ff1744; emissiveIntensity: 0.7; metalness: 0.2; roughness: 0.5');
+          vis.setAttribute('animation__warn', 'property: material.emissiveIntensity; from: 0.25; to: 1; dir: alternate; loop: true; dur: 500');
+        } else if (kind === 'time') {
+          vis.setAttribute('geometry', 'primitive: octahedron; radius: 0.4');
+          vis.setAttribute('material', 'color: #00E676; emissive: #00E676; emissiveIntensity: 0.85; metalness: 0.2; roughness: 0.4');
+          const label = document.createElement('a-text');
+          label.setAttribute('value', '+' + CONFIG.timeBonusSec + 's');
+          label.setAttribute('align', 'center'); label.setAttribute('color', '#B9F6CA');
+          label.setAttribute('position', '0 0.75 0'); label.setAttribute('scale', '1.5 1.5 1.5');
+          label.setAttribute('billboard', '');
+          hit.appendChild(label);
+        } else { // treasure
+          loadModelChain(vis, type.models, type.glow, type.sizeMul, type.tint);
+          if (type.aura) {
+            const ring = document.createElement('a-ring');
+            ring.setAttribute('radius-inner', 0.5); ring.setAttribute('radius-outer', 0.62);
+            ring.setAttribute('rotation', '-90 0 0');
+            ring.setAttribute('material', `color: ${type.aura}; emissive: ${type.aura}; emissiveIntensity: 0.8; side: double; shader: flat`);
+            ring.setAttribute('animation__pulse', 'property: scale; to: 1.18 1.18 1.18; dir: alternate; loop: true; dur: 900');
+            hit.appendChild(ring);
+          }
+        }
+        hit.appendChild(vis);
+
+        const data = { el: hit, pos: pos, collected: false, kind: kind, type: type || null };
+        hit.addEventListener('click', () => this.collect(data));
+        this.root.appendChild(hit);
+        this.treasures.push(data);
+        return data;
+      },
+
+      clearKind: function (kind) {
+        this.treasures = this.treasures.filter((t) => {
+          if (t.kind === kind && !t.collected) { t.el.parentNode && t.el.parentNode.removeChild(t.el); return false; }
+          return true;
+        });
+      },
+      relocate: function (data) {
+        const pos = this.randomPos();
+        data.pos = pos; this.applyBob(data.el, pos);
+      },
+
+      spawnWave: function () {
+        // 지뢰·시간템은 매 웨이브 새로 (이전 것 제거)
+        this.clearKind('mine'); this.clearKind('time');
+        // 남은 진짜 보물은 새 위치로 재배치
+        const uncollected = this.treasures.filter((t) => t.kind === 'treasure' && !t.collected);
+        uncollected.forEach((t) => this.relocate(t));
+        // 새 보물 보충 (총량 count 초과 금지)
+        const toAdd = Math.max(0, Math.min(this.level.perWave - uncollected.length, this.needed - this.spawnedReal));
+        for (let i = 0; i < toAdd; i++) { this.makeOne('treasure', pickType()); this.spawnedReal++; }
+        // 지뢰·시간 보너스
+        for (let i = 0; i < this.level.fakes; i++) this.makeOne('mine');
+        for (let i = 0; i < this.level.timeItems; i++) this.makeOne('time');
+
+        this.waveNum++;
+        document.getElementById('wave').textContent = this.waveNum;
+        if (this.waveNum > 1) showToast('🌊 웨이브 ' + this.waveNum + '!', 'time');
+      },
+
+      updateCombo: function () {
+        const el = document.getElementById('combo'), pill = document.getElementById('comboPill');
+        el.textContent = this.combo >= 1 ? ('x' + this.combo) : '—';
+        el.classList.toggle('hot', this.combo >= 3);
+        pill.classList.remove('bump'); void pill.offsetWidth; if (this.combo >= 1) pill.classList.add('bump');
+      },
+
+      spawnBurst: function (pos, color) {
+        const burst = document.createElement('a-entity');
+        burst.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+        for (let i = 0; i < 10; i++) {
+          const p = document.createElement('a-sphere');
+          p.setAttribute('radius', 0.06);
+          p.setAttribute('material', `color: ${color}; emissive: ${color}; emissiveIntensity: 1; shader: flat`);
+          const dx = (Math.random() - 0.5) * 1.5, dy = (Math.random() - 0.5) * 1.5 + 0.3, dz = (Math.random() - 0.5) * 1.5;
+          p.setAttribute('animation__move', `property: position; to: ${dx} ${dy} ${dz}; dur: 600; easing: easeOutQuad`);
+          p.setAttribute('animation__fade', `property: scale; from: 1 1 1; to: 0 0 0; dur: 600; easing: easeInQuad`);
+          burst.appendChild(p);
+        }
+        this.root.appendChild(burst);
+        setTimeout(() => burst.parentNode && burst.parentNode.removeChild(burst), 660);
+      },
+
+      collect: function (data) {
+        if (data.collected || !this.started) return;
+        data.collected = true;
+        data.el.setAttribute('animation__collect', 'property: scale; to: 0 0 0; dur: 240; easing: easeInBack');
+        setTimeout(() => data.el.parentNode && data.el.parentNode.removeChild(data.el), 260);
+
+        if (data.kind === 'mine') {
+          fakeSound(); this.spawnBurst(data.pos, '#FF1744');
+          this.deadline -= CONFIG.fakePenaltySec * 1000;
+          this.score = Math.max(0, this.score - 1);
+          this.combo = 0; this.updateCombo();
+          showToast('💥 -' + CONFIG.fakePenaltySec + 's', 'bad');
+        } else if (data.kind === 'time') {
+          timeSound(); this.spawnBurst(data.pos, '#00E676');
+          this.deadline += CONFIG.timeBonusSec * 1000;
+          showToast('+' + CONFIG.timeBonusSec + 's', 'time');
+        } else {
+          const now = performance.now();
+          this.combo = (now - this.lastCollect <= CONFIG.comboWindowMs) ? this.combo + 1 : 1;
+          this.lastCollect = now;
+          const gained = data.type.points * this.combo;
+          this.score += gained; this.collected++;
+          collectSound(this.combo);
+          this.spawnBurst(data.pos, data.type.tint || '#FFD54F');
+          this.updateCombo();
+          showToast(this.combo >= 2 ? `+${gained}  x${this.combo}🔥` : `+${gained}`, null);
+          document.getElementById('remaining').textContent = this.needed - this.collected;
+          if (this.collected >= this.needed) return this.end(true);
+          // 현재 화면의 진짜 보물을 다 모았고 아직 더 남았으면 즉시 다음 웨이브
+          const left = this.treasures.some((t) => t.kind === 'treasure' && !t.collected);
+          if (!left && this.spawnedReal < this.needed) {
+            this.spawnWave();
+            if (this.level.waveMs > 0) this.nextWaveAt = performance.now() + this.level.waveMs;
+          }
+        }
+        document.getElementById('score').textContent = this.score;
+      },
+
+      end: function (win) {
+        this.started = false; jingle(win);
+        const prevBest = getBest(selectedKey), isRecord = this.score > prevBest;
+        if (isRecord) setBest(selectedKey, this.score);
+        const best = getBest(selectedKey);
+        const sec = Math.max(0, (this.deadline - performance.now()) / 1000).toFixed(1);
+        document.getElementById('endTitle').textContent = win ? '🎉 클리어!' : '⏰ 시간 종료';
+        document.getElementById('record').textContent = isRecord ? '🏅 신기록!' : '';
+        document.getElementById('endStat').innerHTML = (win
+          ? `남은 시간 <b>${sec}</b>초 · 점수 <b>${this.score}</b>`
+          : `획득 <b>${this.collected}/${this.needed}</b> · 점수 <b>${this.score}</b>`)
+          + `<br><span style="opacity:.75">최고 ${best}</span>`;
+        document.getElementById('endScreen').style.display = 'flex';
+        refreshBestLabels();
+      },
+
+      tick: function () {
+        if (!this.started) return;
+        const now = performance.now();
+
+        if (this.combo > 0 && now - this.lastCollect > CONFIG.comboWindowMs) { this.combo = 0; this.updateCombo(); }
+
+        // 콤보 게이지(원형 링): 남은 유지시간 비율(초록→노랑→빨강)
+        const ring = document.getElementById('comboRing');
+        const ringFill = document.getElementById('comboRingFill');
+        const mult = document.getElementById('comboMult');
+        if (this.combo >= 1) {
+          const ratio = Math.max(0, 1 - (now - this.lastCollect) / CONFIG.comboWindowMs);
+          const C = 188.5; // 2πr (r=30)
+          ring.style.opacity = 1;
+          ringFill.style.strokeDasharray = C;
+          ringFill.style.strokeDashoffset = C * (1 - ratio);
+          ringFill.style.stroke = ratio > 0.5 ? '#00E676' : (ratio > 0.25 ? '#FFD54F' : '#FF5252');
+          mult.style.opacity = this.combo >= 2 ? 1 : 0;
+          mult.textContent = 'x' + this.combo;
+        } else {
+          ring.style.opacity = 0; mult.style.opacity = 0;
+        }
+
+        // 웨이브 타이머
+        if (now >= this.nextWaveAt) {
+          this.spawnWave();
+          this.nextWaveAt = now + this.level.waveMs;
+        }
+
+        const left = (this.deadline - now) / 1000;
+        const timerEl = document.getElementById('timer');
+        timerEl.textContent = Math.max(0, left).toFixed(1);
+        timerEl.classList.toggle('low', left <= 10);
+        if (left <= 0) return this.end(false);
+
+        this.cam.object3D.getWorldDirection(this.fwd);
+        this.fwd.y = 0; if (this.fwd.lengthSq() < 1e-6) return; this.fwd.normalize();
+        this.right.crossVectors(this.fwd, this.up).normalize();
+
+        let bestAng = null, bestAbs = 999, bestY = 0;
+        for (const t of this.treasures) {
+          if (t.collected || t.kind !== 'treasure') continue;
+          this.d.copy(t.pos); const ty = this.d.y; this.d.y = 0;
+          if (this.d.lengthSq() < 1e-6) continue; this.d.normalize();
+          const ang = Math.atan2(this.d.dot(this.right), this.d.dot(this.fwd)) * 180 / Math.PI;
+          if (Math.abs(ang) < bestAbs) { bestAbs = Math.abs(ang); bestAng = ang; bestY = ty; }
+        }
+
+        const arrow = document.getElementById('arrow'), label = document.getElementById('radarLabel');
+        if (bestAng === null) { arrow.style.opacity = 0; label.textContent = '다음 웨이브 대기…'; return; }
+        arrow.style.opacity = 1;
+        arrow.style.transform = `rotate(${bestAng}deg)`;
+        const onTarget = bestAbs < 12;
+        arrow.style.filter = onTarget ? 'drop-shadow(0 0 14px rgba(255,213,79,1))' : 'drop-shadow(0 0 6px rgba(255,213,79,.6))';
+        const vhint = bestY > 0.9 ? ' · 위쪽 ▲' : (bestY < -0.9 ? ' · 아래쪽 ▼' : '');
+        label.textContent = (onTarget ? '조준! 잠깐 응시' : '이 방향에 보물') + vhint;
+      }
+    });
+  </script>
+</body>
+</html>

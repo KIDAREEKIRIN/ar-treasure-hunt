@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebAR 데모 모음</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; font-family: -apple-system, system-ui, sans-serif;
+      background: radial-gradient(circle at 30% 0%, #1a237e, #0d0d1a);
+      color: #fff; display: flex; flex-direction: column; align-items: center;
+      padding: 32px 18px; box-sizing: border-box;
+    }
+    h1 { font-size: 24px; margin: 8px 0 4px; }
+    p.sub { opacity: .7; font-size: 14px; margin: 0 0 24px; text-align: center; }
+    .cards { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 440px; }
+    a.card {
+      display: block; text-decoration: none; color: #fff;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 18px; padding: 18px 20px; transition: transform .15s, background .15s;
+    }
+    a.card:active { transform: scale(.98); background: rgba(255,255,255,.12); }
+    a.card .emoji { font-size: 30px; }
+    a.card h2 { margin: 8px 0 4px; font-size: 18px; }
+    a.card p { margin: 0; opacity: .75; font-size: 13px; line-height: 1.5; }
+    .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 8px;
+           background: rgba(255,213,79,.18); color: #FFD54F; margin-top: 8px; }
+    .note { margin-top: 26px; max-width: 440px; font-size: 12px; opacity: .6; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>🕶️ WebAR 데모 모음</h1>
+  <p class="sub">스마트폰·태블릿 브라우저에서 열어보세요 (HTTPS 필요)</p>
+
+  <div class="cards">
+    <a class="card" href="demo-a-tabletop.html">
+      <div class="emoji">🎲</div>
+      <h2>A. 테이블탑 보드게임</h2>
+      <p>Hiro 마커를 바닥/책상에 놓으면 그 위에 보드판이 펼쳐집니다. 탭하면 주사위를 굴려 말이 이동.</p>
+      <span class="tag">마커 = 바닥 앵커</span>
+    </a>
+    <a class="card" href="demo-b-exploration.html">
+      <div class="emoji">🔭</div>
+      <h2>B. 방 탐험 보물찾기</h2>
+      <p>그 자리에서 몸을 돌려 360° 방을 둘러보며 숨은 보물 6개를 찾습니다. 자이로(기기 방향) 기반.</p>
+      <span class="tag">자이로 트래킹</span>
+    </a>
+    <a class="card" href="demo-c-image-target.html">
+      <div class="emoji">🖼️</div>
+      <h2>C. 이미지 타깃 콘텐츠 등장</h2>
+      <p>Kanji 마커(또는 특정 그림)를 비추면 캐릭터와 아이템 카드가 튀어나옵니다.</p>
+      <span class="tag">이미지 인식</span>
+    </a>
+  </div>
+
+  <p class="note">
+    ⚠️ 카메라 접근에는 HTTPS가 필요합니다. <code>file://</code>로 직접 열면 작동하지 않습니다.
+    README.md의 실행 방법을 참고하세요. 마커 이미지(Hiro·Kanji)도 README에 링크가 있습니다.
+  </p>
+</body>
+</html>

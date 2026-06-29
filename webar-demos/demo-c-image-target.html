@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Demo C — 이미지 타깃 콘텐츠 등장 AR</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: -apple-system, system-ui, sans-serif; }
+    #hud {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+      background: rgba(0,0,0,.65); color: #fff; padding: 10px 16px;
+      border-radius: 14px; font-size: 14px; text-align: center; line-height: 1.5;
+    }
+    #status { color: #FFD54F; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="hud">🖼️ Kanji 마커(또는 이미지)를 비추면 콘텐츠가 등장합니다<br/>상태: <span id="status">마커 찾는 중…</span></div>
+
+  <a-scene
+    embedded
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true;"
+    arjs="sourceType: webcam; detectionMode: mono; debugUIEnabled: false;">
+
+    <!-- Kanji 프리셋 마커: 이 그림을 비추면 아래 콘텐츠가 튀어나옴 -->
+    <a-marker preset="kanji" id="target">
+      <a-entity id="popup" position="0 0 0" scale="0 0 0"
+                animation__pop="property: scale; from: 0 0 0; to: 1 1 1; dur: 600; startEvents: appear; easing: easeOutBack"
+                animation__hide="property: scale; to: 0 0 0; dur: 250; startEvents: disappear; easing: easeInBack">
+
+        <!-- 떠오르는 캐릭터(다면체) -->
+        <a-dodecahedron radius="0.5" position="0 0.8 0" color="#7E57C2"
+                        material="metalness: 0.4; roughness: 0.3; emissive: #4527A0; emissiveIntensity: 0.3"
+                        animation__spin="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear"
+                        animation__float="property: position; to: 0 1.0 0; dir: alternate; loop: true; dur: 1600; easing: easeInOutSine">
+        </a-dodecahedron>
+
+        <!-- 정보 카드 -->
+        <a-plane position="0 0.1 0" rotation="-90 0 0" width="1.6" height="0.9"
+                 color="#ffffff" opacity="0.92"></a-plane>
+        <a-text value="ITEM UNLOCKED!\n\n전설의 보주\n공격력 +99"
+                align="center" color="#311B92" width="2.2"
+                position="0 0.12 0" rotation="-90 0 0"></a-text>
+
+        <!-- 빛나는 바닥 링 -->
+        <a-ring position="0 0.02 0" rotation="-90 0 0" radius-inner="0.85" radius-outer="0.95"
+                color="#FFD54F" material="emissive: #FFD54F; emissiveIntensity: 0.6"
+                animation__pulse="property: scale; to: 1.1 1.1 1.1; dir: alternate; loop: true; dur: 1000"></a-ring>
+      </a-entity>
+    </a-marker>
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    const marker = document.getElementById('target');
+    const popup = document.getElementById('popup');
+    const status = document.getElementById('status');
+
+    // 마커가 화면에 잡히면 콘텐츠 등장 애니메이션
+    marker.addEventListener('markerFound', () => {
+      status.textContent = '✨ 콘텐츠 등장!';
+      popup.emit('appear');
+    });
+    // 마커가 사라지면 숨김
+    marker.addEventListener('markerLost', () => {
+      status.textContent = '마커 찾는 중…';
+      popup.emit('disappear');
+    });
+  </script>
+</body>
+</html>

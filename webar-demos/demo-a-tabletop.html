@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Demo A — 테이블탑 보드게임 AR</title>
+  <!-- A-Frame: 3D 씬 엔진 -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- AR.js: 마커 인식 + 카메라 트래킹 -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: -apple-system, system-ui, sans-serif; }
+    #hud {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 10; background: rgba(0,0,0,.65); color: #fff;
+      padding: 10px 16px; border-radius: 14px; font-size: 15px; text-align: center;
+      pointer-events: none; line-height: 1.5;
+    }
+    #hud b { color: #FFD54F; font-size: 20px; }
+    #hint {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      z-index: 10; background: rgba(0,0,0,.55); color: #fff;
+      padding: 8px 14px; border-radius: 12px; font-size: 13px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">🎲 화면을 탭하면 주사위를 굴립니다<br/>주사위: <b id="dice">-</b> · 칸: <b id="cell">0</b>/8</div>
+  <div id="hint">Hiro 마커를 바닥/책상에 놓고 비춰주세요</div>
+
+  <!-- 보드 체커판 텍스처를 캔버스로 생성 -->
+  <canvas id="boardtex" width="512" height="512" style="display:none"></canvas>
+
+  <a-scene
+    embedded
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true; precision: medium;"
+    arjs="sourceType: webcam; detectionMode: mono; debugUIEnabled: false;">
+
+    <!-- Hiro 프리셋 마커: 이 마커가 보드의 '바닥 앵커'가 됩니다 -->
+    <a-marker preset="hiro" id="anchor" board-game>
+      <!-- 보드판 (8x8 체커판) -->
+      <a-plane rotation="-90 0 0" width="1.4" height="1.4" position="0 0 0"
+               material="src: #boardtex; transparent: false"></a-plane>
+
+      <!-- 칸 경로 위에 놓일 말(pawn) -->
+      <a-entity id="pawn" position="-0.61 0.12 0.61">
+        <a-cylinder radius="0.07" height="0.16" color="#E53935"
+                    position="0 0 0"></a-cylinder>
+        <a-sphere radius="0.06" color="#E53935" position="0 0.12 0"></a-sphere>
+      </a-entity>
+
+      <!-- 굴린 주사위 표시용 큐브 -->
+      <a-box id="diceCube" position="0 0.45 -0.5" depth="0.16" height="0.16" width="0.16"
+             color="#FFFFFF"
+             animation="property: rotation; to: 360 360 0; dur: 600; startEvents: roll; easing: easeOutQuad;"></a-box>
+    </a-marker>
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    // ---- 체커판 텍스처 그리기 ----
+    (function drawBoard() {
+      const c = document.getElementById('boardtex');
+      const ctx = c.getContext('2d');
+      const n = 8, s = c.width / n;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? '#1b5e20' : '#a5d6a7';
+          ctx.fillRect(x * s, y * s, s, s);
+        }
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,.3)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i <= n; i++) {
+        ctx.beginPath(); ctx.moveTo(i * s, 0); ctx.lineTo(i * s, c.width); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * s); ctx.lineTo(c.width, i * s); ctx.stroke();
+      }
+    })();
+
+    // ---- 보드게임 로직: 탭 -> 주사위 -> 말 이동 ----
+    AFRAME.registerComponent('board-game', {
+      init: function () {
+        this.cell = 0;                 // 현재 칸 (0~8)
+        this.path = [];                // 말이 지나갈 칸 좌표
+        // 보드 한 변 1.4, 8칸 -> 칸 간격
+        const half = 0.61, step = 1.22 / 8;
+        for (let i = 0; i <= 8; i++) {
+          this.path.push({ x: -half + step * i, z: half });
+        }
+        this.pawn = document.getElementById('pawn');
+        this.dice = document.getElementById('diceCube');
+
+        // 화면 어디를 탭해도 굴리기
+        window.addEventListener('click', () => this.roll());
+      },
+      roll: function () {
+        const n = 1 + Math.floor(Math.random() * 6);
+        document.getElementById('dice').textContent = n;
+        this.dice.emit('roll');
+
+        this.cell = Math.min(8, this.cell + n);
+        document.getElementById('cell').textContent = this.cell;
+        const p = this.path[this.cell];
+        // 말을 새 칸으로 폴짝 이동
+        this.pawn.setAttribute('animation__move', {
+          property: 'position', to: `${p.x} 0.12 ${p.z}`, dur: 500, easing: 'easeOutBack'
+        });
+        this.pawn.setAttribute('animation__hop', {
+          property: 'position', from: `${p.x} 0.12 ${p.z}`, to: `${p.x} 0.30 ${p.z}`,
+          dur: 250, dir: 'alternate', loop: 1, easing: 'easeOutQuad'
+        });
+
+        if (this.cell >= 8) {
+          document.getElementById('hint').textContent = '🏁 도착! 탭하면 처음으로';
+          if (this._done) { this.cell = 0; }
+          this._done = true;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
