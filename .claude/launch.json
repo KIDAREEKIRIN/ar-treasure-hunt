@@ -4,7 +4,7 @@
     {
       "name": "treasure-hunt",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8124", "--directory", "treasure-hunt"],
+      "runtimeArgs": ["-m", "http.server", "8124"],
       "port": 8124
     }
   ]
